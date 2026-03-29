@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwarmBuilder — Multi-Agent Dev Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --bg2: #111318;
+    --bg3: #181c23;
+    --bg4: #1e232c;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e8eaf0;
+    --muted: #7a7f8e;
+    --accent: #6c63ff;
+    --accent2: #00d4aa;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --purple: #a855f7;
+    --teal: #14b8a6;
+    --coral: #f97316;
+    --mono: 'Space Mono', monospace;
+    --code: 'Fira Code', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
+
+  /* Layout */
+  .shell { display: grid; grid-template-columns: 260px 1fr 320px; grid-template-rows: 52px 1fr; height: 100vh; }
+  .topbar { grid-column: 1/-1; display: flex; align-items: center; gap: 12px; padding: 0 20px; background: var(--bg2); border-bottom: 1px solid var(--border); }
+  .sidebar { background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; }
+  .main { overflow-y: auto; display: flex; flex-direction: column; }
+  .panel { background: var(--bg2); border-left: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; }
+
+  /* Topbar */
+  .logo { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; }
+  .logo span { color: var(--accent2); }
+  .topbar-mid { flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 16px; }
+  .phase-pill { font-family: var(--mono); font-size: 11px; padding: 3px 10px; border-radius: 20px; border: 1px solid; }
+  .phase-pill.idle     { color: var(--muted); border-color: var(--border2); }
+  .phase-pill.building { color: var(--accent); border-color: var(--accent); background: rgba(108,99,255,.1); animation: pulse-border 1.8s ease-in-out infinite; }
+  .phase-pill.testing  { color: var(--warn); border-color: var(--warn); background: rgba(245,158,11,.08); animation: pulse-border 1.8s ease-in-out infinite; }
+  .phase-pill.usertest { color: var(--teal); border-color: var(--teal); background: rgba(20,184,166,.08); animation: pulse-border 1.8s ease-in-out infinite; }
+  .phase-pill.done     { color: var(--accent2); border-color: var(--accent2); background: rgba(0,212,170,.08); }
+  @keyframes pulse-border { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+  .btn { font-family: var(--sans); font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border2); background: transparent; color: var(--text); cursor: pointer; transition: all .15s; white-space: nowrap; }
+  .btn:hover { background: rgba(255,255,255,.06); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #7c74ff; }
+  .btn.success { background: var(--accent2); border-color: var(--accent2); color: #000; font-weight: 600; }
+  .btn.danger { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.3); color: var(--danger); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* Sidebar */
+  .sidebar-section { padding: 12px 16px 6px; }
+  .sidebar-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+  .sidebar-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; cursor: pointer; transition: background .12s; font-size: 13px; color: var(--text); border: none; background: none; width: 100%; text-align: left; }
+  .sidebar-item:hover { background: rgba(255,255,255,.05); }
+  .sidebar-item.active { background: rgba(108,99,255,.15); color: var(--accent); }
+  .agent-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot-idle    { background: var(--muted); }
+  .dot-active  { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); animation: dotpulse 1.2s ease-in-out infinite; }
+  .dot-testing { background: var(--warn); box-shadow: 0 0 6px var(--warn); animation: dotpulse 1.2s ease-in-out infinite; }
+  .dot-user    { background: var(--teal); box-shadow: 0 0 6px var(--teal); animation: dotpulse 1.2s ease-in-out infinite; }
+  .dot-done    { background: #22c55e; }
+  .dot-error   { background: var(--danger); }
+  @keyframes dotpulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  .agent-badge { font-family: var(--mono); font-size: 9px; padding: 1px 5px; border-radius: 4px; margin-left: auto; }
+  .badge-skill { background: rgba(168,85,247,.2); color: var(--purple); }
+  .badge-test  { background: rgba(245,158,11,.15); color: var(--warn); }
+  .badge-user  { background: rgba(20,184,166,.15); color: var(--teal); }
+
+  hr.side { border: none; border-top: 1px solid var(--border); margin: 8px 16px; }
+
+  /* API Key section */
+  .api-section { padding: 12px 14px; margin: 8px; border-radius: 10px; background: var(--bg3); border: 1px solid var(--border); }
+  .api-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .api-input { flex: 1; background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; padding: 5px 8px; color: var(--text); font-family: var(--mono); font-size: 11px; }
+  .api-input:focus { outline: none; border-color: var(--accent); }
+  select.api-select { background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; padding: 5px 8px; color: var(--text); font-family: var(--sans); font-size: 12px; cursor: pointer; }
+  select.api-select:focus { outline: none; border-color: var(--accent); }
+  .api-status { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .api-status.ok { color: var(--accent2); }
+
+  /* Main area */
+  .main-inner { padding: 24px; flex: 1; display: flex; flex-direction: column; gap: 20px; }
+  .prompt-card { background: var(--bg3); border: 1px solid var(--border2); border-radius: 14px; padding: 20px; }
+  .prompt-card h2 { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .8px; }
+  textarea.prompt-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; resize: vertical; min-height: 80px; }
+  textarea.prompt-input:focus { outline: none; border-color: var(--accent); }
+  .prompt-actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+  .iter-label { font-size: 12px; color: var(--muted); margin-left: auto; }
+  input[type=number].iter-input { width: 48px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; color: var(--text); font-size: 13px; text-align: center; }
+  input[type=number].iter-input:focus { outline: none; border-color: var(--accent); }
+
+  /* Swarm grid */
+  .swarm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .swarm-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 12px; padding: 14px; position: relative; overflow: hidden; }
+  .swarm-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 12px 12px 0 0; }
+  .swarm-card.skill::before { background: var(--purple); }
+  .swarm-card.test::before  { background: var(--warn); }
+  .swarm-card.user::before  { background: var(--teal); }
+  .swarm-card h3 { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .swarm-card .card-sub { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-bottom: 8px; }
+  .swarm-card .card-log { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.5; min-height: 36px; word-break: break-word; }
+  .swarm-card .card-log .log-line { display: block; }
+  .swarm-card .card-log .log-line.ok   { color: var(--accent2); }
+  .swarm-card .card-log .log-line.warn { color: var(--warn); }
+  .swarm-card .card-log .log-line.err  { color: var(--danger); }
+  .swarm-card .card-log .log-line.info { color: var(--accent); }
+  .swarm-card .card-status { display: flex; align-items: center; gap: 5px; margin-top: 8px; font-size: 11px; color: var(--muted); }
+  .thinking-dots::after { content: '...'; animation: dots 1.2s steps(3) infinite; }
+  @keyframes dots { 0%{content:'.'} 33%{content:'..'} 66%{content:'...'} }
+
+  /* Output area - Code Editor Style */
+  .output-section { background: var(--bg3); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; flex: 1; display: flex; flex-direction: column; min-height: 400px; }
+  .output-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg2); }
+  .output-tab { padding: 10px 16px; font-size: 12px; cursor: pointer; border: none; background: none; color: var(--muted); font-family: var(--sans); transition: all .12s; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .output-tab.active { color: var(--text); border-bottom-color: var(--accent); background: var(--bg3); }
+  .output-tab:hover { color: var(--text); }
+  .output-pane { display: none; flex: 1; overflow: hidden; }
+  .output-pane.active { display: flex; }
+
+  /* Code Editor Layout */
+  .code-editor { display: flex; height: 100%; }
+  .file-tree { width: 220px; background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; padding: 12px; }
+  .file-tree-header { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .file-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-family: var(--code); font-size: 12px; color: var(--text); margin-bottom: 2px; transition: all .12s; }
+  .file-item:hover { background: rgba(255,255,255,.05); }
+  .file-item.active { background: rgba(108,99,255,.2); color: var(--accent); }
+  .file-item::before { content: '📄'; font-size: 11px; }
+  .file-item.json::before { content: '{ }'; color: var(--warn); }
+  .file-item.js::before, .file-item.ts::before { content: 'JS'; color: var(--warn); font-size: 9px; font-weight: bold; }
+  .file-item.css::before, .file-item.scss::before { content: '#'; color: var(--accent); font-weight: bold; }
+  .file-item.html::before { content: '</>'; color: var(--coral); font-size: 10px; }
+  .file-item.py::before { content: '🐍'; font-size: 10px; }
+  .file-item.md::before { content: '📝'; font-size: 10px; }
+  .file-item.yml::before, .file-item.yaml::before { content: '⚙️'; font-size: 10px; }
+
+  .code-display { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .code-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: var(--bg4); border-bottom: 1px solid var(--border); }
+  .code-path { font-family: var(--code); font-size: 13px; color: var(--text); }
+  .code-actions { display: flex; gap: 8px; }
+  .code-btn { padding: 4px 10px; font-size: 11px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); cursor: pointer; font-family: var(--sans); }
+  .code-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  pre.code-content { flex: 1; overflow: auto; padding: 16px; margin: 0; font-family: var(--code); font-size: 13px; line-height: 1.6; color: #abb2bf; background: var(--bg); }
+  
+  /* Syntax Highlighting */
+  .kw  { color: #c792ea; } /* keyword */
+  .str { color: #c3e88d; } /* string */
+  .cm  { color: #546e7a; font-style: italic; } /* comment */
+  .num { color: #f78c6c; } /* number */
+  .fn  { color: #82aaff; } /* function */
+  .cls { color: #ffcb6b; } /* class */
+  .tag { color: #f07178; } /* html tag */
+  .attr { color: #ffcb6b; } /* attribute */
+  .op  { color: #89ddff; } /* operator */
+
+  .report-block { background: var(--bg); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; border-left: 3px solid var(--border2); }
+  .report-block.pass { border-left-color: var(--accent2); }
+  .report-block.fail { border-left-color: var(--danger); }
+  .report-block.info { border-left-color: var(--accent); }
+  .report-block h4 { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .report-block p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .feedback-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .feedback-item:last-child { border: none; }
+  .fb-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; font-family: var(--mono); }
+  .fb-body { flex: 1; }
+  .fb-name { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .fb-text { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  /* Spec Pane */
+  .spec-view { padding: 24px; overflow-y: auto; }
+  .spec-content { max-width: 800px; line-height: 1.8; color: var(--text); }
+  .spec-content h1 { font-size: 24px; margin-bottom: 16px; color: var(--accent); }
+  .spec-content h2 { font-size: 18px; margin-top: 24px; margin-bottom: 12px; color: var(--accent2); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .spec-content h3 { font-size: 14px; margin-top: 16px; color: var(--purple); }
+  .spec-content ul { margin-left: 20px; margin-bottom: 16px; }
+  .spec-content code { background: var(--bg4); padding: 2px 6px; border-radius: 4px; font-family: var(--code); font-size: 12px; color: var(--accent2); }
+  .spec-content pre { background: var(--bg4); padding: 16px; border-radius: 8px; overflow-x: auto; font-family: var(--code); font-size: 12px; margin: 12px 0; }
+
+  /* Right panel */
+  .panel-inner { padding: 16px; flex: 1; }
+  .panel-section-title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 10px; }
+  .iteration-track { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .iter-step { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--border2); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 10px; color: var(--muted); transition: all .3s; flex-shrink: 0; }
+  .iter-step.done  { background: rgba(0,212,170,.15); border-color: var(--accent2); color: var(--accent2); }
+  .iter-step.active { background: rgba(108,99,255,.2); border-color: var(--accent); color: var(--accent); animation: pulse-border 1.5s infinite; }
+  .iter-connector { flex: 1; height: 1.5px; background: var(--border); }
+  .iter-connector.done { background: var(--accent2); }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .stat-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .stat-card .stat-val { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--text); }
+  .stat-card .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .activity-log { font-family: var(--mono); font-size: 11px; line-height: 1.9; max-height: 200px; overflow-y: auto; }
+  .log-entry { display: flex; gap: 8px; }
+  .log-time { color: var(--muted); flex-shrink: 0; }
+  .log-msg { color: var(--text); }
+  .log-msg.skill { color: var(--purple); }
+  .log-msg.test  { color: var(--warn); }
+  .log-msg.user  { color: var(--teal); }
+  .log-msg.sys   { color: var(--muted); }
+  .log-msg.ok    { color: var(--accent2); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .tag { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 4px; border: 1px solid; margin-right: 4px; margin-bottom: 4px; }
+  .tag-purple { color: var(--purple); border-color: rgba(168,85,247,.3); background: rgba(168,85,247,.08); }
+  .tag-teal   { color: var(--teal); border-color: rgba(20,184,166,.3); background: rgba(20,184,166,.08); }
+  .tag-warn   { color: var(--warn); border-color: rgba(245,158,11,.3); background: rgba(245,158,11,.08); }
+  .tag-ok     { color: var(--accent2); border-color: rgba(0,212,170,.3); background: rgba(0,212,170,.08); }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--muted; }
+  .empty-state .emo { font-size: 32px; margin-bottom: 10px; }
+  .empty-state p { font-size: 13px; line-height: 1.6; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; grid-template-rows: 52px auto; }
+    .sidebar, .panel { display: none; }
+    .swarm-grid { grid-template-columns: 1fr; }
+    .file-tree { width: 160px; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="logo">Swarm<span>Builder</span></div>
+    <div class="topbar-mid">
+      <span id="phase-pill" class="phase-pill idle">● IDLE</span>
+      <span id="iter-display" style="font-family:var(--mono);font-size:11px;color:var(--muted)"></span>
+    </div>
+    <button class="btn" id="reset-btn" onclick="resetAll()">Reset</button>
+    <button class="btn success" id="export-btn" onclick="exportProject()" disabled>⬇ Export Project</button>
+    <button class="btn primary" id="run-btn" onclick="startSwarm()">▶ Run Swarm</button>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <!-- API Key Config -->
+    <div style="padding:12px">
+      <div class="api-section">
+        <div class="sidebar-label">API Config</div>
+        <select class="api-select" id="provider-select" onchange="updateProvider()" style="width:100%;margin-bottom:6px">
+          <option value="kimi" selected>Kimi (api.moonshot.ai)</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="custom">Custom OpenAI-compat</option>
+        </select>
+        
+        <div class="api-row">
+          <input class="api-input" type="password" id="api-key-input" placeholder="sk-..." />
+        </div>
+        <div id="custom-url-row" style="display:none;margin-top:6px">
+          <input class="api-input" type="text" id="base-url-input" placeholder="https://api.example.com/v1" style="width:100%" />
+        </div>
+        <div class="api-row" style="margin-top:6px">
+          <input class="api-input" type="text" id="model-input" placeholder="model name" style="flex:1" />
+        </div>
+        <div id="api-status" class="api-status">No key set</div>
+        <button class="btn" style="width:100%;margin-top:8px;font-size:12px" onclick="saveApiConfig()">Save Config</button>
+      </div>
+    </div>
+
+    <hr class="side">
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Skill Agents</div>
+      <button class="sidebar-item" id="sa-arch"  onclick="focusAgent('arch')">
+        <span class="agent-dot dot-idle" id="dot-arch"></span> Architect
+        <span class="agent-badge badge-skill">SKILL</span>
+      </button>
+      <button class="sidebar-item" id="sa-fe" onclick="focusAgent('fe')">
+        <span class="agent-dot dot-idle" id="dot-fe"></span> Frontend
+        <span class="agent-badge badge-skill">SKILL</span>
+      </button>
+      <button class="sidebar-item" id="sa-be" onclick="focusAgent('be')">
+        <span class="agent-dot dot-idle" id="dot-be"></span> Backend
+        <span class="agent-badge badge-skill">SKILL</span>
+      </button>
+      <button class="sidebar-item" id="sa-devops" onclick="focusAgent('devops')">
+        <span class="agent-dot dot-idle" id="dot-devops"></span> DevOps
+        <span class="agent-badge badge-skill">SKILL</span>
+      </button>
+      <button class="sidebar-item" id="sa-docs" onclick="focusAgent('docs')">
+        <span class="agent-dot dot-idle" id="dot-docs"></span> Docs
+        <span class="agent-badge badge-skill">SKILL</span>
+      </button>
+    </div>
+
+    <hr class="side">
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Test Agents</div>
+      <button class="sidebar-item" onclick="focusAgent('unit')">
+        <span class="agent-dot dot-idle" id="dot-unit"></span> Unit Tester
+        <span class="agent-badge badge-test">TEST</span>
+      </button>
+      <button class="sidebar-item" onclick="focusAgent('integ')">
+        <span class="agent-dot dot-idle" id="dot-integ"></span> Integration
+        <span class="agent-badge badge-test">TEST</span>
+      </button>
+      <button class="sidebar-item" onclick="focusAgent('e2e')">
+        <span class="agent-dot dot-idle" id="dot-e2e"></span> E2E
+        <span class="agent-badge badge-test">TEST</span>
+      </button>
+      <button class="sidebar-item" onclick="focusAgent('sec')">
+        <span class="agent-dot dot-idle" id="dot-sec"></span> Security
+        <span class="agent-badge badge-test">TEST</span>
+      </button>
+    </div>
+
+    <hr class="side">
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">User Agents</div>
+      <button class="sidebar-item" onclick="focusAgent('power')">
+        <span class="agent-dot dot-idle" id="dot-power"></span> Power User
+        <span class="agent-badge badge-user">USER</span>
+      </button>
+      <button class="sidebar-item" onclick="focusAgent('newbie')">
+        <span class="agent-dot dot-idle" id="dot-newbie"></span> New User
+        <span class="agent-badge badge-user">USER</span>
+      </button>
+      <button class="sidebar-item" onclick="focusAgent('critic')">
+        <span class="agent-dot dot-idle" id="dot-critic"></span> Critic
+        <span class="agent-badge badge-user">USER</span>
+      </button>
+      <button class="sidebar-item" onclick="focusAgent('a11y')">
+        <span class="agent-dot dot-idle" id="dot-a11y"></span> Accessibility
+        <span class="agent-badge badge-user">USER</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="main-inner">
+
+      <!-- Prompt -->
+      <div class="prompt-card">
+        <h2>What are we building?</h2>
+        <textarea class="prompt-input" id="project-prompt" placeholder="Describe your app or feature… e.g. 'A task management web app with drag-and-drop Kanban, user auth, real-time updates, and a REST API'"></textarea>
+        <div class="prompt-actions">
+          <button class="btn" onclick="loadExample('kanban')">Example: Kanban App</button>
+          <button class="btn" onclick="loadExample('api')">Example: REST API</button>
+          <button class="btn" onclick="loadExample('chat')">Example: Chat UI</button>
+          <span class="iter-label">Iterations:</span>
+          <input type="number" class="iter-input" id="iter-count" value="2" min="1" max="5">
+        </div>
+      </div>
+
+      <!-- Swarm cards -->
+      <div class="swarm-grid" id="swarm-grid">
+        <!-- Skill agents row -->
+        <div class="swarm-card skill" id="card-arch">
+          <h3>🏗 Architect</h3>
+          <div class="card-sub">SKILL AGENT</div>
+          <div class="card-log" id="log-arch"><span class="log-line">Waiting for task...</span></div>
+          <div class="card-status"><span class="agent-dot dot-idle" id="cdot-arch"></span><span id="cstatus-arch">Idle</span></div>
+        </div>
+        <div class="swarm-card skill" id="card-fe">
+          <h3>🎨 Frontend</h3>
+          <div class="card-sub">SKILL AGENT</div>
+          <div class="card-log" id="log-fe"><span class="log-line">Waiting for task...</span></div>
+          <div class="card-status"><span class="agent-dot dot-idle" id="cdot-fe"></span><span id="cstatus-fe">Idle</span></div>
+        </div>
+        <div class="swarm-card skill" id="card-be">
+          <h3>⚙️ Backend</h3>
+          <div class="card-sub">SKILL AGENT</div>
+          <div class="card-log" id="log-be"><span class="log-line">Waiting for task...</span></div>
+          <div class="card-status"><span class="agent-dot dot-idle" id="cdot-be"></span><span id="cstatus-be">Idle</span></div>
+        </div>
+        <div class="swarm-card test" id="card-unit">
+          <h3>🧪 Unit Tester</h3>
+          <div class="card-sub">TEST AGENT</div>
+          <div class="card-log" id="log-unit"><span class="log-line">Awaiting build...</span></div>
+          <div class="card-status"><span class="agent-dot dot-idle" id="cdot-unit"></span><span id="cstatus-unit">Idle</span></div>
+        </div>
+        <div class="swarm-card test" id="card-integ">
+          <h3>🔗 Integration</h3>
+          <div class="card-sub">TEST AGENT</div>
+          <div class="card-log" id="log-integ"><span class="log-line">Awaiting build...</span></div>
+          <div class="card-status"><span class="agent-dot dot-idle" id="cdot-integ"></span><span id="cstatus-integ">Idle</span></div>
+        </div>
+        <div class="swarm-card test" id="card-sec">
+          <h3>🔒 Security</h3>
+          <div class="card-sub">TEST AGENT</div>
+          <div class="card-log" id="log-sec"><span class="log-line">Awaiting build...</span></div>
+          <div class="card-status"><span class="agent-dot dot-idle" id="cdot-sec"></span><span id="cstatus-sec">Idle</span></div>
+        </div>
+        <div class="swarm-card user" id="card-power">
+          <h3>💪 Power User</h3>
+          <div class="card-sub">USER AGENT</div>
+          <div class="card-log" id="log-power"><span class="log-line">Waiting for QA pass...</span></div>
+          <div class="card-status"><span class="agent-dot dot-idle" id="cdot-power"></span><span id="cstatus-power">Idle</span></div>
+        </div>
+        <div class="swarm-card user" id="card-newbie">
+          <h3>🌱 New User</h3>
+          <div class="card-sub">USER AGENT</div>
+          <div class="card-log" id="log-newbie"><span class="log-line">Waiting for QA pass...</span></div>
+          <div class="card-status"><span class="agent-dot dot-idle" id="cdot-newbie"></span><span id="cstatus-newbie">Idle</span></div>
+        </div>
+        <div class="swarm-card user" id="card-critic">
+          <h3>🎯 Critic</h3>
+          <div class="card-sub">USER AGENT</div>
+          <div class="card-log" id="log-critic"><span class="log-line">Waiting for QA pass...</span></div>
+          <div class="card-status"><span class="agent-dot dot-idle" id="cdot-critic"></span><span id="cstatus-critic">Idle</span></div>
+        </div>
+      </div>
+
+      <!-- Output tabs -->
+      <div class="output-section">
+        <div class="output-tabs">
+          <button class="output-tab active" onclick="switchTab('code')">Code Output</button>
+          <button class="output-tab" onclick="switchTab('tests')">Test Reports</button>
+          <button class="output-tab" onclick="switchTab('feedback')">User Feedback</button>
+          <button class="output-tab" onclick="switchTab('spec')">Architecture Spec</button>
+        </div>
+        
+        <!-- Code Pane with File Tree -->
+        <div class="output-pane active" id="pane-code">
+          <div class="code-editor">
+            <div class="file-tree">
+              <div class="file-tree-header">
+                <span>Project Files</span>
+                <span style="font-size:10px;color:var(--muted)" id="file-count">0 files</span>
+              </div>
+              <div id="file-list">
+                <div class="empty-state" style="padding:20px 0"><p style="font-size:11px">No files generated yet</p></div>
+              </div>
+            </div>
+            <div class="code-display">
+              <div class="code-header">
+                <span class="code-path" id="current-file">Select a file...</span>
+                <div class="code-actions">
+                  <button class="code-btn" onclick="copyCurrentFile()">Copy</button>
+                  <button class="code-btn" onclick="downloadCurrentFile()">Download</button>
+                </div>
+              </div>
+              <pre class="code-content" id="code-viewer"><code class="cm">// Code will appear here after generation...</code></pre>
+            </div>
+          </div>
+        </div>
+        
+        <div class="output-pane" id="pane-tests">
+          <div class="empty-state"><div class="emo">⬡</div><p>Test reports will appear here after test agents run.</p></div>
+        </div>
+        <div class="output-pane" id="pane-feedback">
+          <div class="empty-state"><div class="emo">⬡</div><p>User agent feedback will appear after simulation.</p></div>
+        </div>
+        <div class="output-pane" id="pane-spec">
+          <div class="spec-view" id="spec-content">
+            <div class="empty-state"><div class="emo">⬡</div><p>Architecture spec will appear after the Architect agent runs.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right panel -->
+  <aside class="panel">
+    <div class="panel-inner">
+      <div class="panel-section-title">Swarm Progress</div>
+
+      <div id="iteration-tracker" style="margin-bottom:20px">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Iteration 0 / <span id="total-iters">2</span></div>
+        <div class="iteration-track" id="iter-track"></div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-val" id="stat-agents">0</div>
+          <div class="stat-lbl">Agents active</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="stat-calls">0</div>
+          <div class="stat-lbl">API calls</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="stat-tests">0</div>
+          <div class="stat-lbl">Tests run</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" id="stat-fixes">0</div>
+          <div class="stat-lbl">Issues fixed</div>
+        </div>
+      </div>
+
+      <div class="panel-section-title" style="margin-top:16px">Activity Feed</div>
+      <div id="activity-log" class="activity-log">
+        <div class="log-entry"><span class="log-time">--:--</span><span class="log-msg sys">SwarmBuilder ready</span></div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────
+const state = {
+  apiKey: '',
+  baseUrl: 'https://api.moonshot.cn/v1',
+  model: 'moonshot-v1-8k',
+  provider: 'kimi',
+  running: false,
+  iteration: 0,
+  maxIter: 2,
+  apiCalls: 0,
+  testsRun: 0,
+  issuesFix: 0,
+  activeAgents: 0,
+  artifacts: { 
+    spec: '', 
+    files: {}, // path -> content
+    tests: '', 
+    feedback: '' 
+  },
+  projectPrompt: '',
+  currentFile: null
+};
+
+const PROVIDERS = {
+  kimi:      { url: 'https://api.moonshot.ai/v1',       model: 'kimi-k2-5',           label: 'Kimi (Moonshot)' },
+  openai:    { url: 'https://api.openai.com/v1',         model: 'gpt-4o-mini',          label: 'OpenAI' },
+  anthropic: { url: 'https://api.anthropic.com/v1',     model: 'claude-3-5-haiku-20241022', label: 'Anthropic' },
+  custom:    { url: '',                                  model: '',                     label: 'Custom' }
+};
+
+// ─── File Type Helpers ───────────────────────────────
+const FILE_EXTENSIONS = {
+  'js': 'javascript', 'ts': 'typescript', 'jsx': 'jsx', 'tsx': 'tsx',
+  'py': 'python', 'css': 'css', 'scss': 'scss', 'html': 'html',
+  'json': 'json', 'md': 'markdown', 'yml': 'yaml', 'yaml': 'yaml',
+  'sh': 'bash', 'dockerfile': 'dockerfile'
+};
+
+function getFileIconClass(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  return FILE_EXTENSIONS[ext] || '';
+}
+
+function syntaxHighlight(code, lang) {
+  // Basic syntax highlighting regex patterns
+  const patterns = [
+    { regex: /\/\/.*/g, class: 'cm' }, // comments
+    { regex: /\/\*[\s\S]*?\*\//g, class: 'cm' }, // block comments
+    { regex: /"(?:[^"\\]|\\.)*"/g, class: 'str' }, // strings
+    { regex: /'(?:[^'\\]|\\.)*'/g, class: 'str' }, // single quotes
+    { regex: /`(?:[^`\\]|\\.)*`/g, class: 'str' }, // template literals
+    { regex: /\b(const|let|var|function|class|import|export|from|return|if|else|for|while|async|await|try|catch|new|this|typeof)\b/g, class: 'kw' },
+    { regex: /\b(true|false|null|undefined)\b/g, class: 'kw' },
+    { regex: /\b\d+\b/g, class: 'num' },
+    { regex: /\b([A-Z][a-zA-Z0-9]*)\b/g, class: 'cls' }, // Classes
+    { regex: /([a-zA-Z0-9_]+)\s*\(/g, class: 'fn' }, // function calls
+  ];
+  
+  let html = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  
+  // Simple syntax highlighting (not perfect but functional)
+  patterns.forEach(p => {
+    html = html.replace(p.regex, match => `<span class="${p.class}">${match}</span>`);
+  });
+  
+  return html;
+}
+
+// ─── API Config ──────────────────────────────────────
+function updateProvider() {
+  const p = document.getElementById('provider-select').value;
+  state.provider = p;
+  const cfg = PROVIDERS[p] || PROVIDERS.custom;
+  document.getElementById('base-url-input').value = cfg.url;
+  document.getElementById('model-input').value = cfg.model;
+
+  state.baseUrl = cfg.url;
+  state.model = cfg.model;
+}
+
+function saveApiConfig() {
+  state.apiKey = document.getElementById('api-key-input').value.trim();
+  state.baseUrl = document.getElementById('base-url-input').value.trim() || PROVIDERS[state.provider].url;
+  state.model = document.getElementById('model-input').value.trim() || PROVIDERS[state.provider].model;
+  const statusEl = document.getElementById('api-status');
+  if (state.apiKey) {
+    statusEl.textContent = '✓ Key saved · ' + state.model;
+    statusEl.className = 'api-status ok';
+  } else {
+    statusEl.textContent = 'No key — demo mode';
+    statusEl.className = 'api-status';
+  }
+}
+
+// init provider
+document.getElementById('base-url-input').value = 'https://api.moonshot.ai/v1'; 
+document.getElementById('model-input').value = 'kimi-k2-5'; 
+state.provider = 'kimi'; state.baseUrl = 'https://api.moonshot.ai/v1'; state.model = 'kimi-k2-5';
+document.getElementById('model-input').value = PROVIDERS.kimi.model;
+document.getElementById('custom-url-row').style.display = 'none';
+
+// ─── LLM Call ────────────────────────────────────────
+async function callLLM(systemPrompt, userMsg, maxTokens = 2000) {
+  state.apiCalls++;
+  document.getElementById('stat-calls').textContent = state.apiCalls;
+
+  if (!state.apiKey) {
+    await sleep(600 + Math.random() * 800);
+    return DEMO_RESPONSES[Math.floor(Math.random() * DEMO_RESPONSES.length)];
+  }
+
+  const endpoint = '/proxy';
+  const headers = { 'Content-Type': 'application/json' };
+
+  const body = {
+    _apiKey: state.apiKey,
+    _baseUrl: state.baseUrl,
+    model: state.model,
+    max_tokens: maxTokens,
+    temperature: 0.2,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMsg }
+    ]
+  };
+
+  try {
+    const res = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`API ${res.status}: ${err.slice(0, 120)}`);
+    }
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || '(empty response)';
+  } catch (e) {
+    return `[API Error: ${e.message}]`;
+  }
+}
+
+// ─── Code Parsing ───────────────────────────────────
+function parseCodeBlocks(text) {
+  const files = {};
+  // Match ```filename.ext or ```lang:filename.ext or ```lang
+  const codeBlockRegex = /```(?:(\w+):)?([^\n]+)?\n([\s\S]*?)```/g;
+  let match;
+  
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    const langOrPath = match[1] || '';
+    const pathOrLang = match[2] || '';
+    const content = match[3].trim();
+    
+    let filename = '';
+    if (pathOrLang && pathOrLang.includes('.')) {
+      filename = pathOrLang.trim();
+    } else if (langOrPath && langOrPath.includes('.')) {
+      filename = langOrPath;
+    } else {
+      // Generate filename based on language
+      const lang = pathOrLang || langOrPath || 'txt';
+      filename = `generated_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.${lang}`;
+    }
+    
+    if (filename) {
+      files[filename] = content;
+    }
+  }
+  
+  return files;
+}
+
+// ─── Demo fallbacks ───────────────────────────────────
+const DEMO_RESPONSES = [
+  `## File Structure
+
+\`\`\`json:package.json
+{
+  "name": "kanban-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dnd": "^16.0.1"
+  }
+}
+\`\`\`
+
+\`\`\`jsx:src/components/Board.jsx
+import React, { useState } from 'react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+
+export const Board = () => {
+  const [tasks, setTasks] = useState([]);
+  
+  const moveTask = (id, toColumn) => {
+    setTasks(prev => prev.map(t => 
+      t.id === id ? { ...t, column: toColumn } : t
+    ));
+  };
+  
+  return (
+    <DndProvider backend={HTML5Backend}>
+      <div className="board">
+        {['todo', 'doing', 'done'].map(col => (
+          <Column key={col} id={col} tasks={tasks.filter(t => t.column === col)} />
+        ))}
+      </div>
+    </DndProvider>
+  );
+};
+\`\`\`
+
+\`\`\`css:src/styles/board.css
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  padding: 20px;
+}
+
+.column {
+  background: var(--bg3);
+  border-radius: 8px;
+  padding: 16px;
+}
+\`\`\`
+`,
+
+  `\`\`\`python:app/main.py
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List
+import uuid
+
+app = FastAPI(title="Task API")
+
+class Task(BaseModel):
+    id: str = None
+    title: str
+    status: str = "todo"
+    assignee: str = None
+
+tasks_db = {}
+
+@app.post("/tasks", response_model=Task)
+async def create_task(task: Task):
+    task.id = str(uuid.uuid4())
+    tasks_db[task.id] = task
+    return task
+
+@app.get("/tasks", response_model=List[Task])
+async def list_tasks(status: str = None):
+    tasks = list(tasks_db.values())
+    if status:
+        tasks = [t for t in tasks if t.status == status]
+    return tasks
+
+@app.put("/tasks/{task_id}")
+async def update_task(task_id: str, task: Task):
+    if task_id not in tasks_db:
+        raise HTTPException(status_code=404, detail="Task not found")
+    tasks_db[task_id] = task
+    return task
+\`\`\`
+
+\`\`\`yaml:docker-compose.yml
+version: '3.8'
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:pass@db:5432/tasks
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: tasks
+\`\`\`
+`
+];
+
+// ─── Agent helpers ────────────────────────────────────
+function setDot(id, cls)       { const d = document.getElementById('dot-'+id); const cd = document.getElementById('cdot-'+id); if(d) d.className = 'agent-dot ' + cls; if(cd) cd.className = 'agent-dot ' + cls; }
+function setCardStatus(id, txt){ const el = document.getElementById('cstatus-'+id); if(el) el.textContent = txt; }
+function setCardLog(id, html)  { const el = document.getElementById('log-'+id); if(el) el.innerHTML = html; }
+function logLine(id, txt, cls='') { setCardLog(id, `<span class="log-line ${cls}">${txt}</span>`); }
+
+function addActivity(msg, cls='sys') {
+  const log = document.getElementById('activity-log');
+  const t = new Date().toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">${t}</span><span class="log-msg ${cls}">${msg}</span>`;
+  log.prepend(entry);
+  if (log.children.length > 60) log.removeChild(log.lastChild);
+}
+
+function setPhase(phase, label) {
+  const pill = document.getElementById('phase-pill');
+  pill.className = 'phase-pill ' + phase;
+  pill.textContent = '● ' + label;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function incStat(id, n=1) {
+  const el = document.getElementById(id);
+  el.textContent = parseInt(el.textContent) + n;
+}
+
+// ─── File Tree UI ────────────────────────────────────
+function updateFileTree() {
+  const fileList = document.getElementById('file-list');
+  const files = Object.keys(state.artifacts.files);
+  
+  document.getElementById('file-count').textContent = `${files.length} files`;
+  document.getElementById('export-btn').disabled = files.length === 0;
+  
+  if (files.length === 0) {
+    fileList.innerHTML = '<div class="empty-state" style="padding:20px 0"><p style="font-size:11px">No files generated yet</p></div>';
+    return;
+  }
+  
+  // Sort files by path
+  files.sort();
+  
+  fileList.innerHTML = files.map(path => {
+    const iconClass = getFileIconClass(path);
+    const isActive = state.currentFile === path ? 'active' : '';
+    return `<div class="file-item ${iconClass} ${isActive}" onclick="selectFile('${path}')">${path}</div>`;
+  }).join('');
+}
+
+function selectFile(path) {
+  state.currentFile = path;
+  updateFileTree();
+  
+  const content = state.artifacts.files[path] || '// No content';
+  const ext = path.split('.').pop();
+  const lang = FILE_EXTENSIONS[ext] || 'plaintext';
+  
+  document.getElementById('current-file').textContent = path;
+  document.getElementById('code-viewer').innerHTML = syntaxHighlight(content, lang);
+}
+
+function copyCurrentFile() {
+  if (!state.currentFile) return;
+  const content = state.artifacts.files[state.currentFile];
+  navigator.clipboard.writeText(content).then(() => {
+    addActivity(`Copied ${state.currentFile} to clipboard`, 'ok');
+  });
+}
+
+function downloadCurrentFile() {
+  if (!state.currentFile) return;
+  const content = state.artifacts.files[state.currentFile];
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = state.currentFile.split('/').pop();
+  a.click();
+  URL.revokeObjectURL(url);
+  addActivity(`Downloaded ${state.currentFile}`, 'ok');
+}
+
+function exportProject() {
+  const files = state.artifacts.files;
+  const projectName = 'swarm-project-' + new Date().toISOString().slice(0,10);
+  
+  // Create a JSON manifest
+  const manifest = {
+    project: projectName,
+    generated: new Date().toISOString(),
+    prompt: state.projectPrompt,
+    iterations: state.maxIter,
+    files: files
+  };
+  
+  const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${projectName}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  
+  addActivity('Exported project manifest', 'ok');
+}
+
+// ─── Tab switching ────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.output-tab').forEach((t,i)=>{
+    const tabs = ['code','tests','feedback','spec'];
+    t.classList.toggle('active', tabs[i] === tab);
+  });
+  document.querySelectorAll('.output-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('pane-'+tab).classList.add('active');
+}
+
+// ─── Examples ────────────────────────────────────────
+const EXAMPLES = {
+  kanban: "Build a complete Kanban task management app with:\n- React frontend with drag-and-drop (react-dnd)\n- Node.js/Express REST API with MongoDB\n- JWT authentication middleware\n- Real-time updates via Socket.io\n- Docker setup for development\n\nProvide full implementation files: package.json, all React components, Express routes, models, and Dockerfile.",
+  
+  api: "Build a production-ready RESTful API for a product catalog:\n- FastAPI (Python) with automatic OpenAPI docs\n- PostgreSQL database with SQLAlchemy models\n- Redis caching layer\n- Comprehensive test suite with pytest\n- Docker + docker-compose setup\n\nInclude all Python files, requirements.txt, docker-compose.yml, and test files.",
+  
+  chat: "Build a real-time team chat application:\n- Next.js frontend with TypeScript\n- WebSocket server using ws library\n- Message persistence with Prisma ORM\n- File upload handling\n- Authentication with NextAuth.js\n\nProvide tsx components, API routes, WebSocket handlers, Prisma schema, and config files."
+};
+function loadExample(key) { document.getElementById('project-prompt').value = EXAMPLES[key]; }
+
+// ─── Reset ────────────────────────────────────────────
+function resetAll() {
+  if (state.running) return;
+  state.iteration = 0; state.apiCalls = 0; state.testsRun = 0; state.issuesFix = 0; state.activeAgents = 0;
+  state.artifacts = { spec: '', files: {}, tests: '', feedback: '' };
+  state.currentFile = null;
+  
+  ['arch','fe','be','devops','docs','unit','integ','e2e','sec','power','newbie','critic','a11y'].forEach(id => {
+    setDot(id, 'dot-idle');
+    setCardStatus(id, 'Idle');
+  });
+  ['arch','fe','be'].forEach(id => logLine(id, 'Waiting for task...'));
+  ['unit','integ','sec'].forEach(id => logLine(id, 'Awaiting build...'));
+  ['power','newbie','critic'].forEach(id => logLine(id, 'Waiting for QA pass...'));
+  setPhase('idle', 'IDLE');
+  document.getElementById('iter-display').textContent = '';
+  document.getElementById('stat-agents').textContent = '0';
+  document.getElementById('stat-calls').textContent = '0';
+  document.getElementById('stat-tests').textContent = '0';
+  document.getElementById('stat-fixes').textContent = '0';
+  document.getElementById('export-btn').disabled = true;
+  
+  document.getElementById('pane-tests').innerHTML = '<div class="empty-state"><div class="emo">⬡</div><p>Test reports will appear here after test agents run.</p></div>';
+  document.getElementById('pane-feedback').innerHTML = '<div class="empty-state"><div class="emo">⬡</div><p>User agent feedback will appear after simulation.</p></div>';
+  document.getElementById('pane-spec').innerHTML = '<div class="empty-state"><div class="emo">⬡</div><p>Architecture spec will appear after the Architect agent runs.</p></div>';
+  document.getElementById('code-viewer').innerHTML = '<code class="cm">// Code will appear here after generation...</code>';
+  document.getElementById('current-file').textContent = 'Select a file...';
+  updateFileTree();
+  buildIterTrack();
+  addActivity('State reset', 'sys');
+}
+
+function buildIterTrack() {
+  const n = parseInt(document.getElementById('iter-count').value) || 2;
+  state.maxIter = n;
+  document.getElementById('total-iters').textContent = n;
+  const track = document.getElementById('iter-track');
+  track.innerHTML = '';
+  for (let i = 1; i <= n; i++) {
+    const step = document.createElement('div');
+    step.className = 'iter-step'; step.id = 'iter-'+i; step.textContent = i;
+    track.appendChild(step);
+    if (i < n) { const conn = document.createElement('div'); conn.className = 'iter-connector'; conn.id = 'iconn-'+i; track.appendChild(conn); }
+  }
+}
+buildIterTrack();
+
+function markIterStep(n, status) {
+  const el = document.getElementById('iter-'+n);
+  const conn = document.getElementById('iconn-'+n);
+  if (!el) return;
+  if (status === 'active') el.className = 'iter-step active';
+  else if (status === 'done') { el.className = 'iter-step done'; el.textContent = '✓'; if(conn) conn.className = 'iter-connector done'; }
+}
+
+// ─── Agent runners ────────────────────────────────────
+async function runSkillAgent(id, name, role, prompt, extraCtx='') {
+  setDot(id, 'dot-active'); setCardStatus(id, 'Working'); state.activeAgents++;
+  document.getElementById('stat-agents').textContent = state.activeAgents;
+  logLine(id, `<span class="thinking-dots">Coding</span>`, 'info');
+  addActivity(`${name} agent started`, 'skill');
+
+  const sys = `You are a ${role} in a multi-agent software development swarm.
+CRITICAL: You must generate COMPLETE, IMPLEMENTABLE code files, not summaries.
+For each file you create, use this exact format:
+\`\`\`filename.ext
+[COMPLETE FILE CONTENT HERE]
+\`\`\`
+
+Rules:
+1. Provide FULL implementations, not snippets or pseudocode
+2. Every file must be complete and syntactically correct
+3. Include all imports, types, and exports
+4. Add comments explaining complex logic
+5. Follow best practices for the specific technology stack
+6. If fixing previous code, output the complete corrected file`;
+
+  const result = await callLLM(sys, `Project: ${prompt}\n\nPrevious context: ${extraCtx}\n\nGenerate complete ${name} implementation with all necessary files:`, 2500);
+
+  // Parse code blocks and store files
+  const newFiles = parseCodeBlocks(result);
+  Object.assign(state.artifacts.files, newFiles);
+  
+  // Update UI
+  const fileCount = Object.keys(newFiles).length;
+  logLine(id, `Generated ${fileCount} files`, 'ok');
+  setDot(id, 'dot-done'); setCardStatus(id, 'Done');
+  state.activeAgents = Math.max(0, state.activeAgents - 1);
+  document.getElementById('stat-agents').textContent = state.activeAgents;
+  addActivity(`${name} completed (${fileCount} files)`, 'ok');
+  
+  // Refresh file tree if this is the first batch
+  if (Object.keys(state.artifacts.files).length > 0) {
+    updateFileTree();
+    // Auto-select first file if none selected
+    if (!state.currentFile) {
+      selectFile(Object.keys(state.artifacts.files)[0]);
+    }
+  }
+  
+  return result;
+}
+
+async function runTestAgent(id, name, role, buildFiles) {
+  setDot(id, 'dot-testing'); setCardStatus(id, 'Testing'); state.activeAgents++;
+  document.getElementById('stat-agents').textContent = state.activeAgents;
+  logLine(id, `<span class="thinking-dots">Testing</span>`, 'warn');
+  addActivity(`${name} agent running`, 'test');
+
+  // Prepare file summary for testing
+  const fileSummary = Object.entries(buildFiles)
+    .map(([path, content]) => `${path}:\n${content.slice(0, 200)}...`)
+    .join('\n\n');
+
+  const sys = `You are a ${role} testing agent in a software swarm.
+Review the provided code files and generate:
+1. A verdict: PASS or FAIL
+2. Specific test code (unit tests, integration tests, or security tests) as executable code blocks
+3. Bug reports with specific file paths and line numbers if issues found
+
+Output format:
+\`\`\`filename.test.ext
+[complete test code]
+\`\`\``;
+
+  const result = await callLLM(sys, `Files to test:\n${fileSummary}\n\nProvide ${name} report and test code:`, 2000);
+
+  state.testsRun += Object.keys(buildFiles).length;
+  document.getElementById('stat-tests').textContent = state.testsRun;
+
+  // Parse any test files generated
+  const testFiles = parseCodeBlocks(result);
+  Object.assign(state.artifacts.files, testFiles);
+
+  const hasFail = result.toLowerCase().includes('fail') || result.toLowerCase().includes('error') || result.toLowerCase().includes('critical');
+  logLine(id, hasFail ? 'Issues detected' : 'All tests passed', hasFail ? 'err' : 'ok');
+  setDot(id, hasFail ? 'dot-error' : 'dot-done'); setCardStatus(id, hasFail ? 'Issues found' : 'Passed');
+  state.activeAgents = Math.max(0, state.activeAgents - 1);
+  document.getElementById('stat-agents').textContent = state.activeAgents;
+  addActivity(`${name} report ready`, 'test');
+  return { result, hasFail, testFiles };
+}
+
+async function runUserAgent(id, name, persona, buildFiles, testOutput) {
+  setDot(id, 'dot-user'); setCardStatus(id, 'Reviewing'); state.activeAgents++;
+  document.getElementById('stat-agents').textContent = state.activeAgents;
+  logLine(id, `<span class="thinking-dots">Reviewing</span>`, 'info');
+  addActivity(`${name} agent reviewing`, 'user');
+
+  const fileList = Object.keys(buildFiles).join(', ');
+
+  const sys = `You are simulating a ${persona} reviewing a software implementation.
+Review the file structure and implementation quality. Provide:
+1. Specific feedback on UX/code quality
+2. Identified bugs or missing features with specific file references
+3. Suggestions for improvements
+Be specific about which files need changes.`;
+
+  const result = await callLLM(sys, `Available files: ${fileList}\n\nTest results: ${testOutput.slice(0, 300)}\n\nAs a ${persona}, provide detailed code review:`, 1000);
+
+  logLine(id, 'Review complete', 'ok');
+  setDot(id, 'dot-done'); setCardStatus(id, 'Done');
+  state.activeAgents = Math.max(0, state.activeAgents - 1);
+  document.getElementById('stat-agents').textContent = state.activeAgents;
+  addActivity(`${name} feedback ready`, 'user');
+  return result;
+}
+
+// ─── Main orchestration ───────────────────────────────
+async function startSwarm() {
+  if (state.running) return;
+  const prompt = document.getElementById('project-prompt').value.trim();
+  if (!prompt) { alert('Please describe what you want to build first.'); return; }
+
+  state.running = true;
+  state.projectPrompt = prompt;
+  state.maxIter = parseInt(document.getElementById('iter-count').value) || 2;
+  document.getElementById('total-iters').textContent = state.maxIter;
+  document.getElementById('run-btn').disabled = true;
+  buildIterTrack();
+
+  if (!state.apiKey) {
+    addActivity('No API key — running in demo mode (simulated responses)', 'sys');
+  }
+
+  for (let iter = 1; iter <= state.maxIter; iter++) {
+    state.iteration = iter;
+    document.getElementById('iter-display').textContent = `Iteration ${iter}/${state.maxIter}`;
+    markIterStep(iter, 'active');
+    addActivity(`=== Iteration ${iter} started ===`, 'sys');
+
+    // ── Phase 1: Skill agents ──
+    setPhase('building', 'BUILDING');
+
+    // Run agents sequentially to build on each other's work, or parallel for speed
+    const specOut = await runSkillAgent('arch', 'Architect', 'Software Architect', prompt, iter > 1 ? `Previous iteration issues: ${state.artifacts.feedback.slice(0,500)}` : '');
+    state.artifacts.spec = specOut;
+    
+    // Update spec pane
+    document.getElementById('pane-spec').innerHTML = `
+      <div class="spec-view">
+        <div class="spec-content">
+          <h1>Architecture Specification</h1>
+          <div>${specOut.replace(/```[\s\S]*?```/g, '').replace(/\n/g, '<br>')}</div>
+        </div>
+      </div>`;
+
+    // Parallel execution for FE/BE after spec is ready
+    const [feOut, beOut] = await Promise.all([
+      runSkillAgent('fe', 'Frontend', 'Frontend Engineer', prompt, `Architecture spec: ${specOut.slice(0,300)}`),
+      runSkillAgent('be', 'Backend', 'Backend Engineer', prompt, `Architecture spec: ${specOut.slice(0,300)}`)
+    ]);
+
+    await runSkillAgent('devops', 'DevOps', 'DevOps Engineer', prompt, `Frontend: ${feOut.slice(0,200)}\n\nBackend: ${beOut.slice(0,200)}`);
+    await runSkillAgent('docs', 'Docs', 'Technical Writer', prompt, `Files generated: ${Object.keys(state.artifacts.files).join(', ')}`);
+
+    // ── Phase 2: Test agents ──
+    setPhase('testing', 'TESTING');
+    await sleep(300);
+
+    const [unitR, integR, secR] = await Promise.all([
+      runTestAgent('unit',  'Unit Tester',  'Unit Testing', state.artifacts.files),
+      runTestAgent('integ', 'Integration',  'Integration Testing', state.artifacts.files),
+      runTestAgent('sec',   'Security',     'Security Auditor', state.artifacts.files),
+    ]);
+
+    const anyFail = unitR.hasFail || integR.hasFail || secR.hasFail;
+    if (anyFail) { state.issuesFix++; document.getElementById('stat-fixes').textContent = state.issuesFix; }
+
+    document.getElementById('pane-tests').innerHTML = `
+      <div style="margin-bottom:12px"><span class="tag tag-warn">Iteration ${iter}</span></div>
+      <div class="report-block ${unitR.hasFail?'fail':'pass'}">
+        <h4>Unit Tests ${unitR.hasFail?'⚠ Issues':'✓ Pass'}</h4>
+        <p>${escHtml(unitR.result.slice(0, 400))}${unitR.result.length > 400 ? '...' : ''}</p>
+        ${Object.keys(unitR.testFiles).map(f => `<span class="tag tag-ok">${f}</span>`).join('')}
+      </div>
+      <div class="report-block ${integR.hasFail?'fail':'pass'}">
+        <h4>Integration Tests ${integR.hasFail?'⚠ Issues':'✓ Pass'}</h4>
+        <p>${escHtml(integR.result.slice(0, 400))}</p>
+      </div>
+      <div class="report-block ${secR.hasFail?'fail':'pass'}">
+        <h4>Security Audit ${secR.hasFail?'⚠ Issues':'✓ Pass'}</h4>
+        <p>${escHtml(secR.result.slice(0, 400))}</p>
+      </div>`;
+
+    // ── Phase 3: User agents ──
+    setPhase('usertest', 'USER TESTING');
+    await sleep(300);
+
+    const [powerR, newbieR, criticR] = await Promise.all([
+      runUserAgent('power',  'Power User',  'power user who uses the app daily', state.artifacts.files, unitR.result),
+      runUserAgent('newbie', 'New User',    'first-time user trying the app', state.artifacts.files, unitR.result),
+      runUserAgent('critic', 'Critic',      'critical product reviewer', state.artifacts.files, unitR.result),
+    ]);
+
+    const fbBundle = `Power User:\n${powerR}\n\nNew User:\n${newbieR}\n\nCritic:\n${criticR}`;
+    state.artifacts.feedback = fbBundle;
+
+    const avatarColors = [
+      ['#6c63ff','#1a1830'], ['#14b8a6','#0d2e2a'], ['#f97316','#2e1a09']
+    ];
+    document.getElementById('pane-feedback').innerHTML = `
+      <div style="margin-bottom:12px"><span class="tag tag-teal">Iteration ${iter}</span></div>
+      ${[['power','Power User',powerR],['newbie','New User',newbieR],['critic','Critic',criticR]].map(([id,name,r],i)=>`
+        <div class="feedback-item">
+          <div class="fb-avatar" style="background:${avatarColors[i][0]};color:${avatarColors[i][1]}">${name.slice(0,2).toUpperCase()}</div>
+          <div class="fb-body"><div class="fb-name">${name}</div><div class="fb-text">${escHtml(r)}</div></div>
+        </div>`).join('')}`;
+
+    // If there were failures, add them to context for next iteration
+    if (anyFail && iter < state.maxIter) {
+      addActivity('Issues found — fixing in next iteration', 'warn');
+    }
+
+    markIterStep(iter, 'done');
+    addActivity(`Iteration ${iter} complete`, 'ok');
+    
+    // Update file tree display
+    updateFileTree();
+    await sleep(200);
+  }
+
+  setPhase('done', 'COMPLETE');
+  addActivity(`Swarm complete — ${state.maxIter} iteration(s) done`, 'ok');
+  document.getElementById('iter-display').textContent = `✓ ${state.maxIter} iterations complete`;
+  document.getElementById('run-btn').disabled = false;
+  state.running = false;
+  
+  // Final file tree update
+  updateFileTree();
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function focusAgent(id) {
+  const card = document.getElementById('card-'+id);
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Initialize file tree
+updateFileTree();
+</script>
+</body>
+</html>
